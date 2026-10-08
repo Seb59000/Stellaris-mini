@@ -196,7 +196,7 @@ namespace StellarisMini
             else pathLine.enabled = false;
 
             // Caméra
-            gm.Cam.transform.position = new Vector3(camPos.x, camPos.y, -camDist);
+            gm.Cam.transform.SetPositionAndRotation(new Vector3(camPos.x, camPos.y, -camDist), Quaternion.identity);
         }
 
         void UpdateFleets(Fleet selFleet)

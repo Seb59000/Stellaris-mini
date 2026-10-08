@@ -269,7 +269,7 @@ namespace StellarisMini
                 }
                 if (s.occupier != null && explored)
                 {
-                    sub = "Siège " + Mathf.RoundToInt(100f * s.occupation / GalaxySim.OccupationDays(s)) + " %";
+                    sub = "Siège " + Mathf.RoundToInt(100f * s.occupation / sim.OccupationRequired(s)) + " %";
                     subCol = Palette.Bad;
                 }
                 if (sub != null) UI.ScreenLabel(gp + new Vector2(0, 17f * UI.S), sub, subCol);
@@ -320,7 +320,7 @@ namespace StellarisMini
 
         float Resource(float x, string name, float value, float income, Color c)
         {
-            UI.Fill(new Rect(x, 21, 14, 14), c);
+            UI.Dot(new Rect(x, 21, 14, 14), c);
             string inc = income >= 0 ? Palette.Tint("+" + income.ToString("0.#"), Palette.Good) : Palette.Tint(income.ToString("0.#"), Palette.Bad);
             UI.Label(new Rect(x + 20, 8, 200, 22), "<b>" + Mathf.FloorToInt(value) + "</b>  " + inc, UI.Text);
             UI.Label(new Rect(x + 20, 30, 200, 22), name + " / mois", UI.Small);
@@ -388,8 +388,8 @@ namespace StellarisMini
 
             if (s.occupier != null)
             {
-                UI.Label(L.Next(24), Palette.Tint("Siège par ", Palette.Bad) + s.occupier.Rich + " : " + Mathf.RoundToInt(100f * s.occupation / GalaxySim.OccupationDays(s)) + " %");
-                UI.Bar(L.Next(6), s.occupation / GalaxySim.OccupationDays(s), Palette.Bad);
+                UI.Label(L.Next(24), Palette.Tint("Siège par ", Palette.Bad) + s.occupier.Rich + " : " + Mathf.RoundToInt(100f * s.occupation / sim.OccupationRequired(s)) + " %");
+                UI.Bar(L.Next(6), s.occupation / sim.OccupationRequired(s), Palette.Bad);
             }
 
             if (s.owner == player && s.colony != null) DrawShipyard(L, s);
@@ -638,11 +638,11 @@ namespace StellarisMini
                 float a = Mathf.Clamp01((12f - age) / 2f);
                 var c = n.color;
                 c.a = a;
-                UI.Fill(new Rect(x, y, w, 30), new Color(0.02f, 0.05f, 0.1f, 0.75f * a));
-                UI.Fill(new Rect(x, y, 4, 30), c);
+                UI.RoundFill(new Rect(x, y, w, 30), new Color(0.02f, 0.05f, 0.1f, 0.75f * a));
+                UI.Dot(new Rect(x + 6, y + 9, 12, 12), c);
                 var old = UI.Small.normal.textColor;
                 UI.Small.normal.textColor = new Color(0.9f, 0.95f, 1f, a);
-                UI.Label(new Rect(x + 12, y + 5, w - 16, 24), n.text, UI.Small);
+                UI.Label(new Rect(x + 26, y + 5, w - 30, 24), n.text, UI.Small);
                 UI.Small.normal.textColor = old;
                 y += 34;
                 shown++;
@@ -693,7 +693,7 @@ namespace StellarisMini
         {
             Dim();
             UI.NavEnabled = true;
-            float w = 760, h = 400;
+            float w = 760, h = 470;
             var area = new Rect((UI.W - w) / 2f, (UI.H - h) / 2f, w, h);
             UI.PanelBox(area);
             var L = new VLayout(area.x + 30, area.y + 24, w - 60, 8);
@@ -704,11 +704,16 @@ namespace StellarisMini
             foreach (var f in b.enemyFleets) theirs += sim.FleetPower(f);
             UI.Label(L.Next(50), "Vos forces : " + CompositionOf(b.playerFleets) + "  (puissance " + Mathf.RoundToInt(mine) + ")");
             UI.Label(L.Next(50), "Ennemi : " + b.enemy.Rich + " — " + CompositionOf(b.enemyFleets) + "  (puissance " + Mathf.RoundToInt(theirs) + ")");
-            float ratio = mine / Mathf.Max(1f, theirs);
+            float ratio = mine * g.settings.Diff.playerDamage / Mathf.Max(1f, theirs * g.settings.Diff.enemyDamage);
             string est = ratio > 1.4f ? Palette.Tint("favorable", Palette.Good) : ratio > 0.8f ? Palette.Tint("incertain", Palette.Warning) : Palette.Tint("défavorable", Palette.Bad);
             UI.Label(L.Next(30), "Rapport de force : " + est);
             L.Space(10);
             if (UI.Button(L.Next(52), "<b>Piloter le vaisseau amiral</b>")) { gm.StartBattle(b); return; }
+            if (UI.Option(L.Next(44), "Vue du combat", g.settings.combat3D ? "3D (poursuite)" : "Vue de dessus") != 0)
+            {
+                g.settings.combat3D = !g.settings.combat3D;
+                MainMenuScreen.SaveSettings(g.settings);
+            }
             if (UI.Button(L.Next(44), "Résolution automatique")) gm.AutoResolveBattle(b);
         }
 
@@ -716,7 +721,7 @@ namespace StellarisMini
         {
             Dim();
             UI.NavEnabled = true;
-            float w = 480, h = 340;
+            float w = 480, h = 400;
             var area = new Rect((UI.W - w) / 2f, (UI.H - h) / 2f, w, h);
             UI.PanelBox(area);
             var L = new VLayout(area.x + 30, area.y + 24, w - 60, 10);
@@ -724,6 +729,11 @@ namespace StellarisMini
             if (UI.Button(L.Next(48), "Reprendre")) pauseMenu = false;
             if (UI.Button(L.Next(48), "Aide et contrôles")) { helpOpen = true; pauseMenu = false; UI.ResetFocus(); }
             if (UI.Button(L.Next(48), "Abandonner (menu principal)")) { gm.ReturnToMenu(); return; }
+            if (UI.Button(L.Next(48), "Combats : " + (g.settings.combat3D ? "3D (poursuite)" : "vue de dessus")))
+            {
+                g.settings.combat3D = !g.settings.combat3D;
+                MainMenuScreen.SaveSettings(g.settings);
+            }
             if (UI.Button(L.Next(48), "Quitter le jeu")) gm.Quit();
         }
 

@@ -14,8 +14,8 @@ namespace StellarisMini
         public static float W { get; private set; }
         public static float H { get { return RefH; } }
 
-        public static GUIStyle Panel, Text, Small, Bold, Title, Huge, Center, CenterSmall, Btn, BtnFocus, BtnOff, BtnSmall, BtnSmallFocus, BtnSmallOff, Shadow;
-        static Texture2D white, panelTex, btnTex, btnHover, btnActive, btnFocusTex, btnOffTex;
+        public static GUIStyle Panel, Pill, Soft, Text, Small, Bold, Title, Huge, Center, CenterSmall, Btn, BtnFocus, BtnOff, BtnSmall, BtnSmallFocus, BtnSmallOff, Shadow;
+        static Texture2D white, panelTex, btnTex, btnHover, btnActive, btnFocusTex, btnOffTex, pillTex, softTex;
         static int builtForW = -1, builtForH = -1;
 
         // --- Navigation manette
@@ -87,17 +87,45 @@ namespace StellarisMini
         // ==================================================================
         static int F(float size) { return Mathf.Max(8, Mathf.RoundToInt(size * S)); }
 
-        static Texture2D Frame(Color fill, Color border)
+        /// Texture "9-slice" à coins arrondis et anticrénelés, avec dégradé vertical et liseré.
+        /// La bordure du style doit valoir (Corner + 1) pour que les coins ne soient pas déformés.
+        static Texture2D Rounded(float radius, float borderW, Color top, Color bottom, Color border, int minHeight)
         {
-            var t = new Texture2D(8, 8, TextureFormat.RGBA32, false);
-            t.filterMode = FilterMode.Point;
-            var px = new Color[64];
-            for (int y = 0; y < 8; y++)
-                for (int x = 0; x < 8; x++)
-                    px[y * 8 + x] = (x == 0 || y == 0 || x == 7 || y == 7) ? border : fill;
+            int b = Mathf.CeilToInt(radius) + 1;
+            int w = 2 * b + 4;
+            int h = Mathf.Max(2 * b + 4, minHeight);
+            var t = new Texture2D(w, h, TextureFormat.RGBA32, false);
+            t.filterMode = FilterMode.Bilinear;
+            t.wrapMode = TextureWrapMode.Clamp;
+            var px = new Color[w * h];
+            float hw = w * 0.5f, hh = h * 0.5f;
+            for (int y = 0; y < h; y++)
+            {
+                var fill = Color.Lerp(bottom, top, h > 1 ? y / (h - 1f) : 0f);
+                for (int x = 0; x < w; x++)
+                {
+                    // Distance signée au rectangle arrondi (négative à l'intérieur)
+                    float qx = Mathf.Abs(x + 0.5f - hw) - (hw - radius);
+                    float qy = Mathf.Abs(y + 0.5f - hh) - (hh - radius);
+                    float ox = Mathf.Max(qx, 0f), oy = Mathf.Max(qy, 0f);
+                    float sd = Mathf.Sqrt(ox * ox + oy * oy) + Mathf.Min(Mathf.Max(qx, qy), 0f) - radius;
+                    float alpha = Mathf.Clamp01(0.5f - sd);
+                    float edge = borderW > 0f ? Mathf.Clamp01(sd + borderW + 0.5f) : 0f;
+                    var c = Color.Lerp(fill, border, edge);
+                    c.a *= alpha;
+                    px[y * w + x] = c;
+                }
+            }
             t.SetPixels(px);
             t.Apply();
             return t;
+        }
+
+        static int Corner(float radius) { return Mathf.CeilToInt(radius) + 1; }
+
+        static void DestroyTex(Texture2D t)
+        {
+            if (t != null) Object.Destroy(t);
         }
 
         static void EnsureStyles()
@@ -113,20 +141,41 @@ namespace StellarisMini
                 white = new Texture2D(2, 2, TextureFormat.RGBA32, false);
                 white.SetPixels(new[] { Color.white, Color.white, Color.white, Color.white });
                 white.Apply();
-                panelTex = Frame(new Color(0.03f, 0.06f, 0.12f, 0.9f), new Color(0.3f, 0.55f, 0.85f, 0.55f));
-                btnTex = Frame(new Color(0.07f, 0.15f, 0.27f, 0.95f), new Color(0.3f, 0.55f, 0.9f, 0.8f));
-                btnHover = Frame(new Color(0.12f, 0.25f, 0.42f, 0.98f), new Color(0.5f, 0.75f, 1f, 0.9f));
-                btnActive = Frame(new Color(0.2f, 0.4f, 0.65f, 1f), new Color(0.7f, 0.9f, 1f, 1f));
-                btnFocusTex = Frame(new Color(0.16f, 0.32f, 0.55f, 1f), new Color(1f, 0.82f, 0.3f, 1f));
-                btnOffTex = Frame(new Color(0.05f, 0.07f, 0.1f, 0.9f), new Color(0.2f, 0.24f, 0.3f, 0.8f));
             }
 
+            // Les coins sont recalculés à chaque changement de résolution pour garder le même arrondi.
+            DestroyTex(panelTex); DestroyTex(btnTex); DestroyTex(btnHover); DestroyTex(btnActive);
+            DestroyTex(btnFocusTex); DestroyTex(btnOffTex); DestroyTex(pillTex); DestroyTex(softTex);
+            float rp = Mathf.Max(5f, 16f * S);    // panneaux
+            float rb = Mathf.Max(4f, 12f * S);    // boutons
+            float rs = Mathf.Max(2f, 4f * S);     // jauges
+            float line = Mathf.Max(1f, 1.5f * S);
+            int tall = Mathf.RoundToInt(64 * S);
+            panelTex = Rounded(rp, line, new Color(0.05f, 0.1f, 0.19f, 0.93f), new Color(0.02f, 0.04f, 0.09f, 0.93f), new Color(0.32f, 0.58f, 0.9f, 0.55f), tall);
+            btnTex = Rounded(rb, line, new Color(0.15f, 0.3f, 0.5f, 0.97f), new Color(0.06f, 0.13f, 0.26f, 0.97f), new Color(0.38f, 0.64f, 1f, 0.85f), tall);
+            btnHover = Rounded(rb, line, new Color(0.22f, 0.42f, 0.66f, 1f), new Color(0.1f, 0.21f, 0.38f, 1f), new Color(0.6f, 0.85f, 1f, 1f), tall);
+            btnActive = Rounded(rb, line, new Color(0.3f, 0.55f, 0.82f, 1f), new Color(0.17f, 0.34f, 0.58f, 1f), new Color(0.8f, 0.95f, 1f, 1f), tall);
+            btnFocusTex = Rounded(rb, Mathf.Max(2f, 3f * S), new Color(0.25f, 0.45f, 0.7f, 1f), new Color(0.12f, 0.25f, 0.44f, 1f), new Color(1f, 0.82f, 0.3f, 1f), tall);
+            btnOffTex = Rounded(rb, line, new Color(0.08f, 0.1f, 0.14f, 0.92f), new Color(0.05f, 0.06f, 0.09f, 0.92f), new Color(0.22f, 0.26f, 0.32f, 0.7f), tall);
+            pillTex = Rounded(rs, 0f, Color.white, Color.white, Color.white, 0);
+            softTex = Rounded(Mathf.Max(4f, 10f * S), 0f, Color.white, Color.white, Color.white, 0);
+
             var textColor = new Color(0.85f, 0.9f, 1f);
-            var border = new RectOffset(2, 2, 2, 2);
+            int cp = Corner(rp), cb = Corner(rb);
 
             Panel = new GUIStyle();
             Panel.normal.background = panelTex;
-            Panel.border = border;
+            Panel.border = new RectOffset(cp, cp, cp, cp);
+
+            Pill = new GUIStyle();
+            Pill.normal.background = pillTex;
+            int cs = Corner(rs);
+            Pill.border = new RectOffset(cs, cs, cs, cs);
+
+            Soft = new GUIStyle();
+            Soft.normal.background = softTex;
+            int cf = Corner(Mathf.Max(4f, 10f * S));
+            Soft.border = new RectOffset(cf, cf, cf, cf);
 
             Text = new GUIStyle(GUI.skin.label) { fontSize = F(19), richText = true, wordWrap = true, alignment = TextAnchor.UpperLeft };
             Text.normal.textColor = textColor;
@@ -142,19 +191,19 @@ namespace StellarisMini
             Shadow = new GUIStyle(CenterSmall);
             Shadow.normal.textColor = new Color(0, 0, 0, 0.85f);
 
-            Btn = MakeButton(F(19), btnTex, textColor);
-            BtnFocus = MakeButton(F(19), btnFocusTex, Color.white);
-            BtnOff = MakeButton(F(19), btnOffTex, new Color(0.45f, 0.5f, 0.58f));
-            BtnSmall = MakeButton(F(16), btnTex, textColor);
-            BtnSmallFocus = MakeButton(F(16), btnFocusTex, Color.white);
-            BtnSmallOff = MakeButton(F(16), btnOffTex, new Color(0.45f, 0.5f, 0.58f));
+            Btn = MakeButton(F(19), btnTex, textColor, cb);
+            BtnFocus = MakeButton(F(19), btnFocusTex, Color.white, cb);
+            BtnOff = MakeButton(F(19), btnOffTex, new Color(0.45f, 0.5f, 0.58f), cb);
+            BtnSmall = MakeButton(F(16), btnTex, textColor, cb);
+            BtnSmallFocus = MakeButton(F(16), btnFocusTex, Color.white, cb);
+            BtnSmallOff = MakeButton(F(16), btnOffTex, new Color(0.45f, 0.5f, 0.58f), cb);
         }
 
-        static GUIStyle MakeButton(int size, Texture2D normal, Color text)
+        static GUIStyle MakeButton(int size, Texture2D normal, Color text, int corner)
         {
             var b = new GUIStyle(GUI.skin.button) { fontSize = size, richText = true, alignment = TextAnchor.MiddleCenter, wordWrap = false };
-            b.border = new RectOffset(2, 2, 2, 2);
-            b.padding = new RectOffset(6, 6, 2, 2);
+            b.border = new RectOffset(corner, corner, corner, corner);
+            b.padding = new RectOffset(corner, corner, 2, 2);
             b.normal.background = normal;
             b.normal.textColor = text;
             b.hover.background = normal == btnTex ? btnHover : normal;
@@ -209,12 +258,55 @@ namespace StellarisMini
             GUI.color = old;
         }
 
+        /// Dessine un style (texture à coins arrondis) teinté d'une couleur, en pixels écran.
+        static void Tinted(GUIStyle st, Rect screenRect, Color c)
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            var old = GUI.color;
+            GUI.color = c;
+            st.Draw(screenRect, false, false, false, false);
+            GUI.color = old;
+        }
+
+        /// Rectangle plein à coins arrondis (coordonnées virtuelles).
+        public static void RoundFill(Rect v, Color c)
+        {
+            Tinted(Soft, Sc(v), c);
+        }
+
+        /// Pastille arrondie (coordonnées virtuelles).
+        public static void Dot(Rect v, Color c)
+        {
+            Tinted(Soft, Sc(v), c);
+        }
+
+        /// Pastille arrondie en pixels écran.
+        public static void DotScreen(Rect r, Color c)
+        {
+            Tinted(Soft, r, c);
+        }
+
+        /// Jauge arrondie.
         public static void Bar(Rect v, float t, Color c)
         {
-            Fill(v, new Color(0, 0, 0, 0.55f));
-            var f = v;
-            f.width = v.width * Mathf.Clamp01(t);
-            Fill(f, c);
+            var r = Sc(v);
+            Tinted(Pill, r, new Color(0, 0, 0, 0.55f));
+            t = Mathf.Clamp01(t);
+            if (t <= 0f) return;
+            var f = r;
+            f.width = Mathf.Max(r.height, r.width * t);
+            Tinted(Pill, f, c);
+        }
+
+        /// Jauge arrondie en pixels écran (HUD de combat).
+        public static void BarScreen(Rect r, float t, Color c)
+        {
+            Tinted(Pill, r, new Color(0, 0, 0, 0.6f));
+            t = Mathf.Clamp01(t);
+            if (t <= 0f) return;
+            var f = r;
+            f.width = Mathf.Max(r.height, r.width * t);
+            Tinted(Pill, f, c);
         }
 
         /// Texte avec ombre, centré sur une position écran (coordonnées GUI, en pixels réels).

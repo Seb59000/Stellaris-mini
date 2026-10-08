@@ -209,6 +209,14 @@ namespace StellarisMini
             f.ships.Add(NewShip(e, ShipClass.Corvette));
             f.ships.Add(NewShip(e, ShipClass.Chasseur));
             f.ships.Add(NewShip(e, ShipClass.Chasseur));
+            if (player)
+            {
+                // Coup de pouce selon la difficulté
+                var d = g.settings.Diff;
+                for (int i = 0; i < d.bonusCorvettes; i++) f.ships.Add(NewShip(e, ShipClass.Corvette));
+                for (int i = 0; i < d.bonusFighters; i++) f.ships.Add(NewShip(e, ShipClass.Chasseur));
+                e.alloys += d.bonusAlloys;
+            }
             g.fleets.Add(f);
         }
 

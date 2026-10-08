@@ -17,7 +17,7 @@ namespace StellarisMini
 
     /// Une bataille pilotée : le joueur contrôle le vaisseau amiral, l'IA dirige le reste.
     /// Si le vaisseau du joueur est détruit, le commandement passe à un autre vaisseau de la flotte.
-    public class CombatSession
+    public class CombatSession : ICombat
     {
         public const float ArenaRadius = 75f;
 
@@ -256,7 +256,7 @@ namespace StellarisMini
             }
             camDist = Mathf.Lerp(camDist, target, 1f - Mathf.Exp(-2f * udt));
             Vector2 sh = shake > 0f && !paused ? Random.insideUnitCircle * shake * 0.6f : Vector2.zero;
-            gm.Cam.transform.position = new Vector3(camPos.x + sh.x, camPos.y + sh.y, -camDist);
+            gm.Cam.transform.SetPositionAndRotation(new Vector3(camPos.x + sh.x, camPos.y + sh.y, -camDist), Quaternion.identity);
         }
 
         void SetPaused(bool p)
@@ -340,7 +340,7 @@ namespace StellarisMini
             {
                 if (!s.alive || s.team == self.team) continue;
                 float score = (s.pos - self.pos).magnitude + Random.Range(0f, 6f);
-                if (s.IsPlayer) score -= 6f;
+                if (s.IsPlayer) score -= gm.Galaxy.settings.Diff.playerFocus;
                 if (self.spec.cls == ShipClass.Chasseur && s.spec.cls == ShipClass.Chasseur) score -= 5f;
                 if (self.spec.cls == ShipClass.Croiseur && s.spec.cls == ShipClass.Croiseur) score -= 5f;
                 if (score < bestScore) { bestScore = score; best = s; }
@@ -530,6 +530,13 @@ namespace StellarisMini
             return new Vector2(sp.x, Screen.height - sp.y);
         }
 
+        /// Multiplicateur de dégâts d'un camp selon la difficulté (0 = joueur, 1 = ennemis).
+        public float TeamDamageMul(int team)
+        {
+            var d = gm.Galaxy.settings.Diff;
+            return team == 0 ? d.playerDamage : d.enemyDamage;
+        }
+
         public float VolumeAt(Vector2 p)
         {
             return Mathf.Clamp01(1f - (p - camPos).magnitude / 70f);
@@ -567,6 +574,7 @@ namespace StellarisMini
             {
                 if (!s.alive) continue;
                 var u = AutoResolve.MakeUnit(s.data, s.empire);
+                u.dps *= TeamDamageMul(s.team);
                 u.hull = s.hull;
                 u.shield = s.shield;
                 if (s.team == 0) a.Add(u); else b.Add(u);
@@ -611,19 +619,35 @@ namespace StellarisMini
             {
                 DrawShipBars();
                 DrawOffscreen();
-                DrawTopInfo();
-                DrawPlayerPanel();
+                CombatHud.TopInfo(battle.system.name, Alive(0), Alive(1), gm.Galaxy.player.color, battle.enemy.color, null);
+                bool alive = player != null && player.alive;
+                if (alive) CombatHud.PlayerPanel(true, player.spec, player.data.name, player.hull, player.maxHull, player.shield, player.maxShield, player.boost, player.MissileReady, null);
+                else CombatHud.PlayerPanel(false, null, null, 0, 1, 0, 1, 0, 0, null);
                 DrawCrosshair();
-                DrawHints();
+                CombatHud.Hints(GameInput.UsingGamepad
+                    ? "[Stick G] Propulsion   [Stick D] Viser   [RT] Canons   [LT] Missiles   [A/LB] Postcombustion   [Y] Changer de vaisseau   [Start] Pause"
+                    : "[ZQSD] Propulsion   [Souris] Viser   [Clic G] Canons   [Clic D] Missiles   [Maj] Postcombustion   [Tab] Changer de vaisseau   [Échap] Pause");
             }
-            DrawBanner();
+            CombatHud.Banner(banner, bannerTime, phase == Phase.Ending, outcome == BattleOutcome.Victory);
 
             if (paused)
             {
                 if (helpOpen) { if (Help.Draw()) helpOpen = false; }
-                else DrawPauseMenu();
+                else
+                {
+                    switch (CombatHud.PauseMenu())
+                    {
+                        case PauseChoice.Resume: SetPaused(false); break;
+                        case PauseChoice.Retreat: Retreat(); return;
+                        case PauseChoice.AutoResolve: AutoResolveNow(); return;
+                        case PauseChoice.Help: helpOpen = true; UI.ResetFocus(); break;
+                    }
+                }
             }
-            else if (phase == Phase.Result) DrawResult();
+            else if (phase == Phase.Result)
+            {
+                if (CombatHud.Result(outcome == BattleOutcome.Victory, enemyLost, playerLost)) Finish();
+            }
         }
 
         void DrawShipBars()
@@ -636,148 +660,28 @@ namespace StellarisMini
                 var gp = WorldToGui(sh.pos + new Vector2(0f, sh.spec.radius + 1.4f), out front);
                 if (!front || gp.x < 0 || gp.y < 0 || gp.x > Screen.width || gp.y > Screen.height) continue;
                 float w = (24f + sh.spec.radius * 10f) * s;
-                var hullCol = sh.team == 0 ? new Color(0.4f, 1f, 0.55f) : new Color(1f, 0.4f, 0.35f);
-                var r = new Rect(gp.x - w / 2f, gp.y, w, 4f * s);
-                UI.FillScreen(r, new Color(0, 0, 0, 0.6f));
-                UI.FillScreen(new Rect(r.x, r.y, w * Mathf.Clamp01(sh.hull / sh.maxHull), r.height), hullCol);
-                if (sh.maxShield > 0f && sh.shield > 0f)
-                {
-                    var sr = new Rect(r.x, r.y - 4f * s, w * Mathf.Clamp01(sh.shield / sh.maxShield), 3f * s);
-                    UI.FillScreen(sr, new Color(0.45f, 0.75f, 1f, 0.9f));
-                }
+                CombatHud.ShipBars(gp, w, sh.hull / sh.maxHull, sh.maxShield > 0f ? sh.shield / sh.maxShield : 0f, sh.team == 0);
             }
         }
 
         void DrawOffscreen()
         {
             float s = UI.S;
-            float m = 22f * s;
-            var center = new Vector2(Screen.width / 2f, Screen.height / 2f);
             foreach (var sh in ships)
             {
                 if (!sh.alive || sh.team == 0) continue;
                 bool front;
                 var gp = WorldToGui(sh.pos, out front);
-                if (front && gp.x > m && gp.y > m && gp.x < Screen.width - m && gp.y < Screen.height - m) continue;
-                var d = gp - center;
-                if (!front) d = -d;
-                if (d.sqrMagnitude < 1f) continue;
-                float k = Mathf.Min((center.x - m) / Mathf.Max(0.001f, Mathf.Abs(d.x)), (center.y - m) / Mathf.Max(0.001f, Mathf.Abs(d.y)));
-                var p = center + d * k;
                 float size = (sh.spec.cls == ShipClass.Croiseur ? 16f : sh.spec.cls == ShipClass.Corvette ? 12f : 9f) * s;
-                var c = sh.empire.color;
-                UI.FillScreen(new Rect(p.x - size / 2f - 2, p.y - size / 2f - 2, size + 4, size + 4), new Color(0, 0, 0, 0.6f));
-                UI.FillScreen(new Rect(p.x - size / 2f, p.y - size / 2f, size, size), c);
+                CombatHud.Offscreen(gp, front, size, sh.empire.color);
             }
-        }
-
-        void DrawTopInfo()
-        {
-            var b = battle;
-            float w = 640;
-            var r = new Rect((UI.W - w) / 2f, 10, w, 64);
-            UI.PanelBox(r);
-            UI.Label(new Rect(r.x, r.y + 6, w, 26), "<b>Bataille de " + b.system.name + "</b>", UI.Center);
-            var pc = Palette.Tint("Alliés : " + Alive(0), Color.Lerp(gm.Galaxy.player.color, Color.white, 0.3f));
-            var ec = Palette.Tint("Ennemis : " + Alive(1), Color.Lerp(b.enemy.color, Color.white, 0.3f));
-            UI.Label(new Rect(r.x, r.y + 34, w, 24), pc + "        " + ec, UI.CenterSmall);
-        }
-
-        void DrawPlayerPanel()
-        {
-            var r = new Rect(16, UI.H - 196, 440, 180);
-            UI.PanelBox(r);
-            var L = new VLayout(r.x + 16, r.y + 12, r.width - 32, 6);
-            if (player == null || !player.alive)
-            {
-                UI.Label(L.Next(30), Palette.Tint("Transfert du commandement…", Palette.Warning), UI.Bold);
-                return;
-            }
-            var p = player;
-            UI.Label(L.Next(28), "<b>" + Names.Ships[(int)p.spec.cls] + " « " + p.data.name + " »</b>", UI.Bold);
-            BarRow(L.Next(22), "Coque", p.hull / p.maxHull, Color.Lerp(Palette.Bad, Palette.Good, p.hull / p.maxHull));
-            BarRow(L.Next(22), "Boucliers", p.maxShield > 0 ? p.shield / p.maxShield : 0f, new Color(0.45f, 0.75f, 1f));
-            BarRow(L.Next(22), "Postcombustion", p.boost, new Color(0.6f, 0.85f, 1f));
-            if (p.spec.missileSalvo > 0)
-                BarRow(L.Next(22), p.MissileReady >= 1f ? "Missiles prêts" : "Missiles", p.MissileReady, new Color(1f, 0.7f, 0.3f));
-            else UI.Label(L.Next(22), Palette.Tint("Pas de missiles sur ce modèle", Palette.Neutral), UI.Small);
-        }
-
-        static void BarRow(Rect r, string label, float t, Color c)
-        {
-            UI.Label(new Rect(r.x, r.y, 150, r.height), label, UI.Small);
-            UI.Bar(new Rect(r.x + 160, r.y + 6, r.width - 160, 10), t, c);
         }
 
         void DrawCrosshair()
         {
             if (GameInput.UsingGamepad || player == null) return;
             var m = GameInput.MousePosition;
-            var c = new Vector2(m.x, Screen.height - m.y);
-            float s = UI.S;
-            var col = new Color(1f, 1f, 1f, 0.85f);
-            UI.FillScreen(new Rect(c.x - 12 * s, c.y - 1 * s, 8 * s, 2 * s), col);
-            UI.FillScreen(new Rect(c.x + 4 * s, c.y - 1 * s, 8 * s, 2 * s), col);
-            UI.FillScreen(new Rect(c.x - 1 * s, c.y - 12 * s, 2 * s, 8 * s), col);
-            UI.FillScreen(new Rect(c.x - 1 * s, c.y + 4 * s, 2 * s, 8 * s), col);
-        }
-
-        void DrawHints()
-        {
-            string h = GameInput.UsingGamepad
-                ? "[Stick G] Propulsion   [Stick D] Viser   [RT] Canons   [LT] Missiles   [A/LB] Postcombustion   [Y] Changer de vaisseau   [Start] Pause"
-                : "[ZQSD] Propulsion   [Souris] Viser   [Clic G] Canons   [Clic D] Missiles   [Maj] Postcombustion   [Tab] Changer de vaisseau   [Échap] Pause";
-            UI.Label(new Rect(470, UI.H - 34, UI.W - 490, 26), h, UI.CenterSmall);
-        }
-
-        void DrawBanner()
-        {
-            if (bannerTime <= 0f || string.IsNullOrEmpty(banner)) return;
-            float a = Mathf.Clamp01(bannerTime / 0.5f);
-            var col = phase == Phase.Ending
-                ? (outcome == BattleOutcome.Victory ? Palette.Good : Palette.Bad)
-                : new Color(1f, 0.95f, 0.8f);
-            col.a = a;
-            var st = phase == Phase.Ending ? UI.Huge : UI.Title;
-            var old = st.alignment;
-            st.alignment = TextAnchor.MiddleCenter;
-            UI.Label(new Rect(0, UI.H * 0.22f, UI.W, 100), Palette.Tint(banner, col), st);
-            st.alignment = old;
-        }
-
-        static void Dim()
-        {
-            UI.FillScreen(new Rect(0, 0, Screen.width, Screen.height), new Color(0, 0, 0, 0.55f));
-        }
-
-        void DrawPauseMenu()
-        {
-            Dim();
-            UI.NavEnabled = true;
-            float w = 520, h = 420;
-            var area = new Rect((UI.W - w) / 2f, (UI.H - h) / 2f, w, h);
-            UI.PanelBox(area);
-            var L = new VLayout(area.x + 30, area.y + 24, w - 60, 10);
-            UI.Label(L.Next(40), "Combat en pause", UI.Title);
-            if (UI.Button(L.Next(50), "Reprendre")) SetPaused(false);
-            if (UI.Button(L.Next(50), "Battre en retraite")) { Retreat(); return; }
-            if (UI.Button(L.Next(50), "Résolution automatique")) { AutoResolveNow(); return; }
-            if (UI.Button(L.Next(50), "Aide et contrôles")) { helpOpen = true; UI.ResetFocus(); }
-            UI.Label(L.Next(60), "La retraite ramène vos vaisseaux survivants dans un système voisin.", UI.Small);
-        }
-
-        void DrawResult()
-        {
-            Dim();
-            UI.NavEnabled = true;
-            float w = 620, h = 330;
-            var area = new Rect((UI.W - w) / 2f, (UI.H - h) / 2f, w, h);
-            UI.PanelBox(area);
-            bool win = outcome == BattleOutcome.Victory;
-            UI.Label(new Rect(area.x, area.y + 20, w, 90), win ? Palette.Tint("VICTOIRE", Palette.Good) : Palette.Tint("DÉFAITE", Palette.Bad), UI.Huge);
-            UI.Label(new Rect(area.x, area.y + 125, w, 30), "Vaisseaux ennemis détruits : <b>" + enemyLost + "</b>", UI.Center);
-            UI.Label(new Rect(area.x, area.y + 158, w, 30), "Vos pertes : <b>" + playerLost + "</b>", UI.Center);
-            if (UI.Button(new Rect(area.x + (w - 380) / 2f, area.y + 230, 380, 54), "Retour à la carte galactique")) Finish();
+            CombatHud.Cross(new Vector2(m.x, Screen.height - m.y), 12f, new Color(1f, 1f, 1f, 0.85f));
         }
     }
 }

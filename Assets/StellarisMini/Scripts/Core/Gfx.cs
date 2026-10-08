@@ -256,9 +256,15 @@ namespace StellarisMini
             new Vector2(0, 1), new Vector2(0.75f, -0.7f), new Vector2(0, -0.3f), new Vector2(-0.75f, -0.7f),
         };
 
+        /// Silhouette d'une classe de vaisseau (avant = +Y, rayon ~1).
+        public static Vector2[] ShipShape(ShipClass c)
+        {
+            return c == ShipClass.Chasseur ? FighterShape : c == ShipClass.Corvette ? CorvetteShape : CruiserShape;
+        }
+
         public static Mesh ShipMesh(ShipClass c, Color color)
         {
-            var shape = c == ShipClass.Chasseur ? FighterShape : c == ShipClass.Corvette ? CorvetteShape : CruiserShape;
+            var shape = ShipShape(c);
             return CachedPolygon(shape, color, (int)c, 0.12f);
         }
 
@@ -389,6 +395,177 @@ namespace StellarisMini
                 var sr = MakeSpriteObj("Nebula", parent, GlowSprite, c, s, -90, true);
                 sr.transform.localPosition = new Vector3(((float)rng.NextDouble() * 2f - 1f) * extent, ((float)rng.NextDouble() * 2f - 1f) * extent, z);
             }
+        }
+
+        // ==================================================================
+        //  3D : matériaux éclairés, coques facettées, sphères, particules fixes
+        // ==================================================================
+        static Material litBase;
+        static readonly Dictionary<long, Material> litCache = new Dictionary<long, Material>();
+        static readonly Dictionary<long, Material> unlitCache = new Dictionary<long, Material>();
+        static readonly Dictionary<int, Mesh> mesh3DCache = new Dictionary<int, Mesh>();
+        static Mesh sphereMesh;
+
+        static long ColorKey(Color c)
+        {
+            Color32 k = c;
+            return ((long)k.r << 24) | ((long)k.g << 16) | ((long)k.b << 8) | k.a;
+        }
+
+        /// Matériau éclairé (shader Standard) d'une couleur donnée.
+        /// Repli sur un matériau non éclairé si le shader n'est pas disponible.
+        public static Material Lit(Color c, float gloss = 0.55f, float metal = 0.35f)
+        {
+            if (litBase == null) litBase = LoadMaterial("StellarisMini/Lit", "Standard");
+            long key = ColorKey(c) ^ ((long)Mathf.RoundToInt(gloss * 100f) << 40) ^ ((long)Mathf.RoundToInt(metal * 100f) << 50);
+            Material m;
+            if (litCache.TryGetValue(key, out m) && m != null) return m;
+            m = new Material(litBase);
+            m.color = c;
+            if (m.HasProperty("_Glossiness")) m.SetFloat("_Glossiness", gloss);
+            if (m.HasProperty("_Metallic")) m.SetFloat("_Metallic", metal);
+            litCache[key] = m;
+            return m;
+        }
+
+        /// Matériau non éclairé (lignes néon) d'une couleur donnée.
+        public static Material Unlit(Color c)
+        {
+            long key = ColorKey(c);
+            Material m;
+            if (unlitCache.TryGetValue(key, out m) && m != null) return m;
+            m = new Material(SpriteMat);
+            m.color = c;
+            unlitCache[key] = m;
+            return m;
+        }
+
+        /// Coque 3D facettée obtenue en "gonflant" la silhouette 2D (avant = +Z).
+        public static Mesh ShipMesh3D(ShipClass c)
+        {
+            Mesh m;
+            if (mesh3DCache.TryGetValue((int)c, out m) && m != null) return m;
+            var shape = ShipShape(c);
+            float hTop = c == ShipClass.Chasseur ? 0.22f : c == ShipClass.Corvette ? 0.28f : 0.34f;
+            float hBot = c == ShipClass.Chasseur ? 0.11f : c == ShipClass.Corvette ? 0.16f : 0.22f;
+            float apexZ = c == ShipClass.Chasseur ? -0.05f : c == ShipClass.Corvette ? -0.1f : -0.15f;
+            var top = new Vector3(0f, hTop, apexZ);
+            var bot = new Vector3(0f, -hBot, apexZ);
+            var center = new Vector3(0f, 0f, apexZ);
+            var light = new Vector3(0.3f, 0.8f, -0.5f).normalized;
+
+            var verts = new List<Vector3>();
+            var cols = new List<Color>();
+            var tris = new List<int>();
+            int n = shape.Length;
+            for (int i = 0; i < n; i++)
+            {
+                var p = shape[i];
+                var q = shape[(i + 1) % n];
+                var P = new Vector3(p.x, 0f, p.y);
+                var Q = new Vector3(q.x, 0f, q.y);
+                AddFacet(verts, cols, tris, top, P, Q, center, light);
+                AddFacet(verts, cols, tris, bot, Q, P, center, light);
+            }
+            m = new Mesh();
+            m.SetVertices(verts);
+            m.SetColors(cols);
+            m.SetTriangles(tris, 0);
+            m.RecalculateNormals();
+            m.RecalculateBounds();
+            mesh3DCache[(int)c] = m;
+            return m;
+        }
+
+        static void AddFacet(List<Vector3> verts, List<Color> cols, List<int> tris, Vector3 a, Vector3 b, Vector3 c, Vector3 center, Vector3 light)
+        {
+            var normal = Vector3.Cross(b - a, c - a);
+            if (normal.sqrMagnitude < 1e-8f) return;
+            // Oriente la face vers l'extérieur (face avant visible)
+            if (Vector3.Dot(normal, (a + b + c) / 3f - center) < 0f)
+            {
+                var t = b; b = c; c = t;
+                normal = -normal;
+            }
+            float shade = 0.55f + 0.45f * Mathf.Max(0f, Vector3.Dot(normal.normalized, light));
+            var col = new Color(shade, shade, shade, 1f);
+            int i0 = verts.Count;
+            verts.Add(a); verts.Add(b); verts.Add(c);
+            cols.Add(col); cols.Add(col); cols.Add(col);
+            tris.Add(i0); tris.Add(i0 + 1); tris.Add(i0 + 2);
+        }
+
+        /// Sphère UV de rayon 0,5 (comme la primitive Unity).
+        public static Mesh Sphere()
+        {
+            if (sphereMesh != null) return sphereMesh;
+            const int lon = 40, lat = 24;
+            var verts = new List<Vector3>();
+            var normals = new List<Vector3>();
+            var tris = new List<int>();
+            for (int y = 0; y <= lat; y++)
+            {
+                float v = (float)y / lat;
+                float phi = v * Mathf.PI;
+                for (int x = 0; x <= lon; x++)
+                {
+                    float theta = (float)x / lon * Mathf.PI * 2f;
+                    var n = new Vector3(Mathf.Sin(phi) * Mathf.Cos(theta), Mathf.Cos(phi), Mathf.Sin(phi) * Mathf.Sin(theta));
+                    verts.Add(n * 0.5f);
+                    normals.Add(n);
+                }
+            }
+            for (int y = 0; y < lat; y++)
+                for (int x = 0; x < lon; x++)
+                {
+                    int a = y * (lon + 1) + x, b = a + lon + 1;
+                    tris.Add(a); tris.Add(a + 1); tris.Add(b);
+                    tris.Add(a + 1); tris.Add(b + 1); tris.Add(b);
+                }
+            sphereMesh = new Mesh();
+            sphereMesh.SetVertices(verts);
+            sphereMesh.SetNormals(normals);
+            sphereMesh.SetTriangles(tris, 0);
+            sphereMesh.RecalculateBounds();
+            return sphereMesh;
+        }
+
+        /// Système de particules "fixes" (étoiles, poussière) : on y émet des particules immobiles et quasi éternelles.
+        public static ParticleSystem StaticParticles(Transform parent, string name, int max, int order)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            var ps = go.AddComponent<ParticleSystem>();
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            var main = ps.main;
+            main.loop = true;
+            main.playOnAwake = false;
+            main.maxParticles = max;
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.startSpeed = 0f;
+            main.startLifetime = 100000f;
+            var em = ps.emission;
+            em.enabled = false;
+            var shape = ps.shape;
+            shape.enabled = false;
+            var r = go.GetComponent<ParticleSystemRenderer>();
+            r.sharedMaterial = GlowMat;
+            r.renderMode = ParticleSystemRenderMode.Billboard;
+            r.sortingOrder = order;
+            r.maxParticleSize = 3f;
+            ps.Play();
+            return ps;
+        }
+
+        public static void EmitStatic(ParticleSystem ps, Vector3 pos, Color c, float size)
+        {
+            var ep = new ParticleSystem.EmitParams();
+            ep.position = pos;
+            ep.velocity = Vector3.zero;
+            ep.startColor = c;
+            ep.startSize = size;
+            ep.startLifetime = 100000f;
+            ps.Emit(ep, 1);
         }
     }
 }

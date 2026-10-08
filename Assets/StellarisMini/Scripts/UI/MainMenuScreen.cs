@@ -12,6 +12,33 @@ namespace StellarisMini
         public MainMenuScreen(GameManager manager)
         {
             gm = manager;
+            // Les derniers réglages choisis sont mémorisés d'une session à l'autre.
+            settings.galaxySize = Mathf.Clamp(PlayerPrefs.GetInt("sm.galaxySize", settings.galaxySize), 0, 2);
+            settings.rivals = Mathf.Clamp(PlayerPrefs.GetInt("sm.rivals", settings.rivals), 1, 4);
+            settings.difficulty = Mathf.Clamp(PlayerPrefs.GetInt("sm.difficulty", settings.difficulty), 0, Difficulty.Levels.Length - 1);
+            settings.combat3D = PlayerPrefs.GetInt("sm.combat3D", settings.combat3D ? 1 : 0) == 1;
+        }
+
+        static GUIStyle wrapCenter;
+        static int wrapFor;
+
+        static GUIStyle WrapCenter()
+        {
+            if (wrapCenter == null || wrapFor != UI.Small.fontSize)
+            {
+                wrapCenter = new GUIStyle(UI.Small) { alignment = TextAnchor.MiddleCenter, wordWrap = true };
+                wrapFor = UI.Small.fontSize;
+            }
+            return wrapCenter;
+        }
+
+        public static void SaveSettings(GameSettings s)
+        {
+            PlayerPrefs.SetInt("sm.galaxySize", s.galaxySize);
+            PlayerPrefs.SetInt("sm.rivals", s.rivals);
+            PlayerPrefs.SetInt("sm.difficulty", s.difficulty);
+            PlayerPrefs.SetInt("sm.combat3D", s.combat3D ? 1 : 0);
+            PlayerPrefs.Save();
         }
 
         public void Update()
@@ -34,9 +61,9 @@ namespace StellarisMini
             UI.Label(new Rect(cx - 600, 150, 1200, 110), Palette.Tint("STELLARIS MINI", glow), UI.Huge);
             UI.Label(new Rect(cx - 600, 255, 1200, 36), "Bâtissez un empire galactique… et pilotez vous-même vos vaisseaux au combat.", UI.Center);
 
-            float w = 520;
-            var L = new VLayout(cx - w / 2f, 360, w, 12);
-            UI.PanelBox(new Rect(cx - w / 2f - 24, 336, w + 48, 470));
+            float w = 560;
+            var L = new VLayout(cx - w / 2f, 330, w, 10);
+            UI.PanelBox(new Rect(cx - w / 2f - 24, 306, w + 48, 600));
             UI.NavEnabled = true;
 
             int d = UI.Option(L.Next(50), "Galaxie", GameSettings.SizeNames[settings.galaxySize] + " (" + GameSettings.SystemCounts[settings.galaxySize] + " systèmes)");
@@ -45,11 +72,16 @@ namespace StellarisMini
             d = UI.Option(L.Next(50), "Empires rivaux", settings.rivals.ToString());
             if (d != 0) settings.rivals = Mathf.Clamp(settings.rivals + d, 1, 4);
 
-            d = UI.Option(L.Next(50), "Difficulté", GameSettings.DifficultyNames[settings.difficulty]);
-            if (d != 0) settings.difficulty = (settings.difficulty + d + 3) % 3;
+            int n = Difficulty.Levels.Length;
+            d = UI.Option(L.Next(50), "Difficulté", settings.Diff.name);
+            if (d != 0) settings.difficulty = (settings.difficulty + d + n) % n;
+            UI.Label(L.Next(40), settings.Diff.description, WrapCenter());
 
-            L.Space(10);
-            if (UI.Button(L.Next(60), "<b>Nouvelle partie</b>")) { gm.NewGame(settings); return; }
+            d = UI.Option(L.Next(50), "Combats", settings.combat3D ? "3D (poursuite)" : "Vue de dessus");
+            if (d != 0) settings.combat3D = !settings.combat3D;
+
+            L.Space(8);
+            if (UI.Button(L.Next(60), "<b>Nouvelle partie</b>")) { SaveSettings(settings); gm.NewGame(settings); return; }
             if (UI.Button(L.Next(50), "Aide et contrôles")) { helpOpen = true; UI.ResetFocus(); }
             if (UI.Button(L.Next(50), "Quitter")) gm.Quit();
             UI.NavEnabled = false;
@@ -97,21 +129,22 @@ namespace StellarisMini
                 "Start : menu   •   View : aide");
 
             Column(new Rect(area.x + 45 + colW, y, colW, h - 170), "<b>Combat piloté</b>",
-                "<b>Clavier / souris</b>\n" +
-                "ZQSD / WASD : propulsion\n" +
-                "Souris : viser\n" +
-                "Clic gauche : canons\n" +
-                "Clic droit : missiles\n" +
-                "Maj : postcombustion\n" +
-                "Tab : changer de vaisseau\n" +
-                "Échap : pause (retraite, résolution auto)\n\n" +
-                "<b>Manette</b>\n" +
-                "Stick gauche : propulsion\n" +
-                "Stick droit : viser (visée assistée)\n" +
-                "RT : canons   •   LT : missiles\n" +
-                "A ou LB : postcombustion\n" +
-                "Y : changer de vaisseau\n" +
-                "Start : pause\n\n" +
+                "<b>Vue de dessus</b>\n" +
+                "ZQSD / stick gauche : propulsion\n" +
+                "Souris / stick droit : viser\n" +
+                "Clic gauche / RT : canons   •   Clic droit / LT : missiles\n" +
+                "Maj / A : postcombustion\n\n" +
+                "<b>3D (poursuite)</b>\n" +
+                "Souris (écart au centre) / stick droit : diriger\n" +
+                "Z / S, stick gauche haut-bas : vitesse\n" +
+                "Q / D, stick gauche gauche-droite : glisser\n" +
+                "A / E, LB / RB : tonneau\n" +
+                "Clic gauche / RT : canons   •   Clic droit / LT : missiles\n" +
+                "Maj / A : postcombustion\n" +
+                "(clavier QWERTY : W/S, A/D et Q/E)\n\n" +
+                "<b>Dans les deux modes</b>\n" +
+                "Tab / Y : changer de vaisseau\n" +
+                "Échap / Start : pause (retraite, résolution auto)\n\n" +
                 "Vous pilotez le vaisseau amiral, l'IA dirige le reste de la flotte. " +
                 "S'il est détruit, vous prenez automatiquement le contrôle d'un autre vaisseau.");
 

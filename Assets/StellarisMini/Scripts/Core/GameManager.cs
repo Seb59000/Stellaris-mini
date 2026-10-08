@@ -18,7 +18,7 @@ namespace StellarisMini
         MainMenuScreen menu;
         GalaxyView view;
         GalaxyScreen galaxyScreen;
-        CombatSession combat;
+        ICombat combat;
         GameObject menuBackdrop;
         float menuAngle;
 
@@ -80,7 +80,7 @@ namespace StellarisMini
                 case GameState.Menu:
                     menu.Update();
                     menuAngle += Time.unscaledDeltaTime * 0.05f;
-                    Cam.transform.position = new Vector3(Mathf.Cos(menuAngle) * 25f, Mathf.Sin(menuAngle * 0.7f) * 15f, -60f);
+                    Cam.transform.SetPositionAndRotation(new Vector3(Mathf.Cos(menuAngle) * 25f, Mathf.Sin(menuAngle * 0.7f) * 15f, -60f), Quaternion.identity);
                     break;
                 case GameState.Galaxy:
                     galaxyScreen.Update();
@@ -164,7 +164,8 @@ namespace StellarisMini
         {
             view.SetVisible(false);
             Fx.Clear();
-            combat = new CombatSession(this, b);
+            if (Galaxy.settings.combat3D) combat = new CombatSession3D(this, b);
+            else combat = new CombatSession(this, b);
             State = GameState.Combat;
             UI.ResetFocus();
         }
@@ -173,7 +174,8 @@ namespace StellarisMini
         public void AutoResolveBattle(Battle b)
         {
             int playerBefore = CountShips(b.playerFleets), enemyBefore = CountShips(b.enemyFleets);
-            bool win = AutoResolve.Run(b.playerFleets, b.enemyFleets);
+            var d = Galaxy.settings.Diff;
+            bool win = AutoResolve.Run(b.playerFleets, b.enemyFleets, d.playerDamage, d.enemyDamage);
             int playerLost = playerBefore - CountShips(b.playerFleets);
             int enemyLost = enemyBefore - CountShips(b.enemyFleets);
             Sim.FinishBattle(b, win ? BattleOutcome.Victory : BattleOutcome.Defeat, enemyLost, playerLost);

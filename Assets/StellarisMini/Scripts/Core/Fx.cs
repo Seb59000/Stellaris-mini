@@ -58,10 +58,15 @@ namespace StellarisMini
 
         static void Emit(ParticleSystem ps, Vector2 pos, Vector2 vel, Color c, float size, float life)
         {
+            Emit3(ps, new Vector3(pos.x, pos.y, -0.3f), new Vector3(vel.x, vel.y, 0f), c, size, life);
+        }
+
+        static void Emit3(ParticleSystem ps, Vector3 pos, Vector3 vel, Color c, float size, float life)
+        {
             if (ps == null) return;
             var ep = new ParticleSystem.EmitParams();
-            ep.position = new Vector3(pos.x, pos.y, -0.3f);
-            ep.velocity = new Vector3(vel.x, vel.y, 0f);
+            ep.position = pos;
+            ep.velocity = vel;
             ep.startColor = c;
             ep.startSize = size;
             ep.startLifetime = life;
@@ -103,6 +108,47 @@ namespace StellarisMini
             {
                 var v = Random.insideUnitCircle * 5f * scale;
                 Glow(pos + Random.insideUnitCircle * scale, v, new Color(0.9f, 0.35f, 0.15f, 0.6f), Random.Range(2f, 4f) * scale, Random.Range(0.6f, 1.4f));
+            }
+        }
+
+        // ------------------------------------------------------------------
+        //  Variantes 3D
+        // ------------------------------------------------------------------
+        public static void Spark3(Vector3 pos, Vector3 vel, Color c, float size, float life)
+        {
+            Emit3(sparks, pos, vel, c, size, life);
+        }
+
+        public static void Glow3(Vector3 pos, Vector3 vel, Color c, float size, float life)
+        {
+            Emit3(glows, pos, vel, c, size, life);
+        }
+
+        public static void Hit3(Vector3 pos, Vector3 normal, Color c, int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var dir = (normal + Random.insideUnitSphere * 0.9f).normalized;
+                Spark3(pos, dir * Random.Range(6f, 16f), c, Random.Range(0.25f, 0.5f), Random.Range(0.15f, 0.35f));
+            }
+            Glow3(pos, Vector3.zero, c * 0.8f, 1.6f, 0.12f);
+        }
+
+        public static void Explosion3(Vector3 pos, float scale, Color tint)
+        {
+            Glow3(pos, Vector3.zero, new Color(1f, 0.9f, 0.7f), 7f * scale, 0.25f);
+            Glow3(pos, Vector3.zero, new Color(1f, 0.55f, 0.2f), 11f * scale, 0.6f);
+            int n = Mathf.RoundToInt(40 * scale);
+            for (int i = 0; i < n; i++)
+            {
+                var v = Random.onUnitSphere * Random.Range(4f, 24f) * Mathf.Sqrt(scale);
+                var c = Random.value < 0.6f ? new Color(1f, Random.Range(0.5f, 0.85f), 0.25f) : tint;
+                Spark3(pos, v, c, Random.Range(0.3f, 0.8f) * Mathf.Sqrt(scale), Random.Range(0.4f, 1.2f));
+            }
+            for (int i = 0; i < 8 * scale; i++)
+            {
+                var v = Random.insideUnitSphere * 5f * scale;
+                Glow3(pos + Random.insideUnitSphere * scale, v, new Color(0.9f, 0.35f, 0.15f, 0.6f), Random.Range(2f, 4.5f) * scale, Random.Range(0.6f, 1.5f));
             }
         }
 

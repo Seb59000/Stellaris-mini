@@ -222,12 +222,14 @@ namespace StellarisMini
     {
         public int galaxySize = 1;   // 0 petite, 1 moyenne, 2 grande
         public int rivals = 2;       // nombre d'empires IA
-        public int difficulty = 1;   // 0 facile, 1 normale, 2 difficile
+        public int difficulty = Difficulty.Default;   // index dans Difficulty.Levels
+        public bool combat3D = true;                  // combats en 3D (sinon vue de dessus)
         public int seed;
+
+        public DifficultyLevel Diff { get { return Difficulty.Get(difficulty); } }
 
         public static readonly string[] SizeNames = { "Petite", "Moyenne", "Grande" };
         public static readonly int[] SystemCounts = { 20, 30, 44 };
-        public static readonly string[] DifficultyNames = { "Facile", "Normale", "Difficile" };
     }
 
     public class Galaxy

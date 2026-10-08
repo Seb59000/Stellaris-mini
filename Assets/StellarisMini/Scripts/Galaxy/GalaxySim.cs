@@ -127,7 +127,7 @@ namespace StellarisMini
                         else if (occ.isPlayer) Notify("Vos forces assiègent " + s.name + ".", Palette.Info, s);
                     }
                     s.occupation += 1f;
-                    if (s.occupation >= OccupationDays(s)) Capture(s, occ);
+                    if (s.occupation >= OccupationRequired(s)) Capture(s, occ);
                 }
                 else
                 {
@@ -240,7 +240,7 @@ namespace StellarisMini
         public float EmpireMul(Empire e)
         {
             float mul = e.ProductionMul;
-            if (!e.isPlayer) mul *= DifficultyMul;
+            mul *= e.isPlayer ? g.settings.Diff.playerProduction : g.settings.Diff.aiProduction;
             return mul;
         }
 
@@ -266,10 +266,6 @@ namespace StellarisMini
             return y;
         }
 
-        public float DifficultyMul
-        {
-            get { return g.settings.difficulty == 0 ? 0.75f : g.settings.difficulty == 2 ? 1.3f : 1f; }
-        }
 
         public float ResearchCost(Empire e, int track)
         {
@@ -360,6 +356,14 @@ namespace StellarisMini
         {
             if (s.colony == null) return 20;
             return s.colony.capital ? 60 : 40;
+        }
+
+        /// Durée du siège, allongée selon la difficulté quand c'est le joueur qui est assiégé.
+        public float OccupationRequired(StarSystem s)
+        {
+            float d = OccupationDays(s);
+            if (s.owner != null && s.owner.isPlayer) d *= g.settings.Diff.siegeMul;
+            return d;
         }
 
         void Capture(StarSystem s, Empire occ)

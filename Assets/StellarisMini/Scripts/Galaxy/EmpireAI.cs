@@ -20,7 +20,7 @@ namespace StellarisMini
         /// Jours de paix au début de la partie, selon la difficulté.
         int GraceDays
         {
-            get { return G.settings.difficulty == 0 ? 900 : G.settings.difficulty == 2 ? 480 : 660; }
+            get { return G.settings.Diff.graceDays; }
         }
 
         public void Think()
@@ -170,7 +170,7 @@ namespace StellarisMini
 
             // Attaque
             if (G.day < GraceDays) return;
-            float minPower = 55f + G.day / 30f * 1.2f;
+            float minPower = G.settings.Diff.minAttackPower + G.day / 30f * 1.2f;
             if (power < minPower) return;
 
             StarSystem target = null;
@@ -182,7 +182,7 @@ namespace StellarisMini
                 if (path == null) continue;
                 float defense = HostilePowerAt(s);
                 foreach (var n in s.lanes) defense += HostilePowerAt(n) * 0.5f;
-                if (power < defense * 1.25f) continue;
+                if (power < defense * G.settings.Diff.attackRatio) continue;
                 float score = path.Count * 10f + defense * 0.2f - (s.owner.isPlayer ? 8f : 0f) - (s.colony == null ? 5f : 0f);
                 if (score < bestScore) { bestScore = score; target = s; }
             }

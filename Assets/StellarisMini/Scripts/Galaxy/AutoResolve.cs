@@ -27,12 +27,13 @@ namespace StellarisMini
 
         /// Fait combattre deux groupes de flottes jusqu'à la destruction de l'un d'eux.
         /// Renvoie true si le camp A l'emporte.
-        public static bool Run(List<Fleet> sideA, List<Fleet> sideB)
+        /// mulA / mulB : multiplicateurs de dégâts de chaque camp (difficulté).
+        public static bool Run(List<Fleet> sideA, List<Fleet> sideB, float mulA = 1f, float mulB = 1f)
         {
             var a = new List<Unit>();
             var b = new List<Unit>();
-            foreach (var f in sideA) foreach (var s in f.ships) if (!s.destroyed) a.Add(MakeUnit(s, f.owner));
-            foreach (var f in sideB) foreach (var s in f.ships) if (!s.destroyed) b.Add(MakeUnit(s, f.owner));
+            foreach (var f in sideA) foreach (var s in f.ships) if (!s.destroyed) { var u = MakeUnit(s, f.owner); u.dps *= mulA; a.Add(u); }
+            foreach (var f in sideB) foreach (var s in f.ships) if (!s.destroyed) { var u = MakeUnit(s, f.owner); u.dps *= mulB; b.Add(u); }
             return Run(a, b);
         }
 

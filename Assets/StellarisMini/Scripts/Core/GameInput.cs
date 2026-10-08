@@ -369,21 +369,37 @@ namespace StellarisMini
         //  Raccourcis de haut niveau
         // ------------------------------------------------------------------
         /// Déplacement (stick gauche ou ZQSD / WASD / flèches).
+        /// Avec l'Input System, les touches sont repérées par leur position physique :
+        /// W/A/S/D correspondent donc automatiquement à Z/Q/S/D sur un clavier AZERTY.
         public static Vector2 Move
         {
             get
             {
                 var v = LeftStick;
-                if (KeyHeld(KeyId.W) || KeyHeld(KeyId.Z) || KeyHeld(KeyId.Up)) v.y += 1;
+#if ENABLE_INPUT_SYSTEM
+                bool up = KeyHeld(KeyId.W), left = KeyHeld(KeyId.A);
+#else
+                bool up = KeyHeld(KeyId.W) || KeyHeld(KeyId.Z), left = KeyHeld(KeyId.A) || KeyHeld(KeyId.Q);
+#endif
+                if (up || KeyHeld(KeyId.Up)) v.y += 1;
                 if (KeyHeld(KeyId.S) || KeyHeld(KeyId.Down)) v.y -= 1;
                 if (KeyHeld(KeyId.D) || KeyHeld(KeyId.Right)) v.x += 1;
-                if (KeyHeld(KeyId.A) || KeyHeld(KeyId.Q) || KeyHeld(KeyId.Left)) v.x -= 1;
+                if (left || KeyHeld(KeyId.Left)) v.x -= 1;
                 return Vector2.ClampMagnitude(v, 1f);
             }
         }
 
         public static bool Confirm { get { return PadDown(Pad.A) || KeyDown(KeyId.Enter); } }
         public static bool Back { get { return PadDown(Pad.B) || KeyDown(KeyId.Escape); } }
+
+        /// Replace le curseur au centre de l'écran (pilotage 3D à la souris).
+        public static void CenterMouse()
+        {
+#if ENABLE_INPUT_SYSTEM
+            var m = Mouse.current;
+            if (m != null && !UsingGamepad) m.WarpCursorPosition(new Vector2(Screen.width * 0.5f, Screen.height * 0.5f));
+#endif
+        }
 
         // ------------------------------------------------------------------
         //  Vibrations

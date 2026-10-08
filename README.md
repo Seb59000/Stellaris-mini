@@ -5,7 +5,8 @@ Un petit jeu de stratégie spatiale pour **Unity 6**, inspiré de Stellaris en t
 - Carte galactique en **temps réel avec pause** (vitesses 1, 2 et 3).
 - Exploration, colonisation, économie, recherche, construction de flottes.
 - Empires rivaux contrôlés par l'IA, qui s'étendent et vous attaquent.
-- Combats pilotés en vue de dessus (style « twin-stick ») : si votre vaisseau est détruit, **le commandement passe automatiquement à un autre vaisseau de la flotte**.
+- Combats pilotés **en 3D** (caméra de poursuite, vol libre avec roulis) ou **en vue de dessus** (style « twin-stick »), au choix : si votre vaisseau est détruit, **le commandement passe automatiquement à un autre vaisseau de la flotte**.
+- **5 niveaux de difficulté**, de « Très facile » à « Très difficile ».
 - Jouable au **clavier + souris** et à la **manette Xbox** (ou toute manette compatible XInput), y compris dans les menus.
 
 Tout est généré par code : graphismes « néon vectoriel », sons synthétisés, interface. Aucun modèle 3D, aucune texture et aucun fichier audio ne sont nécessaires.
@@ -56,7 +57,26 @@ Tout est généré par code : graphismes « néon vectoriel », sons synthétis�
 | Menu | Échap | Start |
 | Aide | F1 | View |
 
-### Combat piloté
+### Combat piloté en 3D
+
+La souris sert de manche : plus le curseur s'éloigne du centre de l'écran, plus le vaisseau tourne vite dans cette direction.
+
+| Action | Clavier AZERTY / souris | Manette Xbox |
+|---|---|---|
+| Diriger (tangage, lacet) | Souris | Stick droit |
+| Accélérer / ralentir | Z / S | Stick gauche haut / bas |
+| Glisser sur le côté | Q / D | Stick gauche gauche / droite |
+| Tonneau (roulis) | A / E | LB / RB |
+| Canons (visée assistée sur la cible encadrée) | Clic gauche | RT |
+| Missiles à tête chercheuse | Clic droit | LT |
+| Postcombustion | Maj | A |
+| Changer de vaisseau | Tab | Y |
+| Pause (retraite, résolution automatique) | Échap | Start |
+
+Sur un clavier QWERTY, les touches sont W/S, A/D et Q/E : elles sont repérées par leur position, pas par leur lettre.
+Les crochets désignent la cible la plus proche de votre axe de tir (rouges quand elle est à portée) et le point rouge indique où viser pour la toucher.
+
+### Combat piloté en vue de dessus
 
 | Action | Clavier / souris | Manette Xbox |
 |---|---|---|
@@ -89,7 +109,21 @@ Tout est généré par code : graphismes « néon vectoriel », sons synthétis�
 - **Guerre** : une flotte qui reste dans un système ennemi sans défenseur l'assiège, puis le conquiert. Quand des flottes ennemies se rencontrent, vous choisissez entre **piloter la bataille** et la **résoudre automatiquement**.
 - **Victoire** : éliminez tous les empires rivaux. **Défaite** : vous perdez votre dernier système.
 
-Les empires rivaux laissent une période de paix au début de la partie (plus longue en Facile, plus courte en Difficile). Profitez-en pour vous développer.
+Les empires rivaux laissent une période de paix au début de la partie. Profitez-en pour vous développer.
+
+### Difficulté et vue des combats
+
+Ces deux réglages se choisissent dans le menu principal et sont mémorisés. La vue des combats peut aussi être changée en cours de partie, depuis la fenêtre d'une bataille ou le menu pause.
+
+| Niveau | Rivaux | Combats | Bonus de départ |
+|---|---|---|---|
+| Très facile | production −50 %, paix ≈ 4 ans, sièges contre vous 80 % plus longs | l'ennemi inflige −55 % de dégâts, vous +35 %, il ne s'acharne pas sur votre vaisseau | +1 corvette, +1 chasseur, +150 alliages |
+| Facile | production −28 %, paix ≈ 2 ans 10 mois | l'ennemi inflige −30 % de dégâts, vous +15 % | +1 chasseur, +75 alliages |
+| Normale | à armes égales, paix ≈ 1 an 10 mois | équilibrés | — |
+| Difficile | production +30 %, attaques plus précoces | l'ennemi inflige +15 % de dégâts | — |
+| Très difficile | production +60 %, paix ≈ 11 mois | l'ennemi inflige +30 % de dégâts | — |
+
+Votre production est aussi augmentée en Très facile (+30 %) et en Facile (+15 %).
 
 ---
 
@@ -106,11 +140,12 @@ Assets/StellarisMini/
     │   ├── Fx.cs                    Particules (impacts, explosions, traînées)
     │   └── Sfx.cs                   Sons synthétisés au démarrage
     ├── UI/
-    │   ├── UI.cs                    Kit d'interface IMGUI avec navigation à la manette
+    │   ├── UI.cs                    Kit d'interface IMGUI (boutons arrondis) avec navigation à la manette
     │   └── MainMenuScreen.cs        Menu principal et écran d'aide
     ├── Galaxy/
     │   ├── Model.cs                 Données : systèmes, planètes, empires, flottes…
     │   ├── ShipCatalog.cs           Caractéristiques des vaisseaux (à modifier pour l'équilibrage)
+    │   ├── Difficulty.cs            Les 5 niveaux de difficulté et leurs réglages
     │   ├── GalaxyGenerator.cs       Génération procédurale de la galaxie
     │   ├── GalaxySim.cs             Simulation : temps, économie, déplacements, sièges, batailles
     │   ├── EmpireAI.cs              IA des empires rivaux
@@ -118,15 +153,18 @@ Assets/StellarisMini/
     │   ├── GalaxyView.cs            Rendu de la carte
     │   └── GalaxyScreen.cs          Contrôles et panneaux de la carte
     └── Combat/
-        ├── CombatSession.cs         Arène, caméra, projectiles, HUD, fin de bataille
-        └── CombatShip.cs            Vaisseau de combat : pilotage, IA, armes, dégâts
+        ├── CombatHud.cs             Interface commune aux deux modes (jauges, pause, résultat)
+        ├── CombatSession.cs         Combat en vue de dessus : arène, caméra, projectiles
+        ├── CombatShip.cs            Vaisseau en vue de dessus : pilotage, IA, armes, dégâts
+        ├── CombatSession3D.cs       Combat en 3D : décor, caméra de poursuite, projectiles, visée
+        └── CombatShip3D.cs          Vaisseau 3D : vol libre, IA, armes, dégâts
 ```
 
 Pour l'**équilibrage**, les réglages principaux se trouvent ici :
 
 - `ShipCatalog.cs` : coûts, vitesses, points de vie et armes des vaisseaux.
 - `GalaxySim.cs` : vitesse du temps (`DaysPerSecond`), coûts de colonisation et production des colonies.
-- `EmpireAI.GraceDays` : durée de la période de paix au début de la partie.
+- `Difficulty.cs` : tous les réglages de chaque niveau de difficulté.
 
 ---
 
@@ -135,5 +173,5 @@ Pour l'**équilibrage**, les réglages principaux se trouvent ici :
 - Pas de sauvegarde / chargement.
 - Pas de diplomatie : tous les empires sont en guerre les uns contre les autres.
 - Interface en IMGUI, simple et entièrement pilotable à la manette. Elle pourra être remplacée par UI Toolkit ou uGUI pour un rendu plus soigné.
-- Les graphismes sont procéduraux et peuvent être remplacés par de vrais modèles : il suffit de modifier `Gfx.ShipMesh` et `CombatShip`.
+- Les graphismes sont procéduraux et peuvent être remplacés par de vrais modèles : il suffit de modifier `Gfx.ShipMesh3D` et `CombatShip3D` (ou `Gfx.ShipMesh` et `CombatShip` en vue de dessus).
 - Le code a été compilé contre les assemblies de référence d'Unity et la simulation stratégique a été testée hors de l'éditeur, mais le jeu n'a pas encore été lancé dans l'éditeur Unity. Signalez tout problème rencontré à l'ouverture.

@@ -49,9 +49,14 @@ namespace StellarisMini.EditorTools
         {
             EnsureFolder(Root, "Resources");
             EnsureFolder(Root + "/Resources", "StellarisMini");
-            string path = ResourcesDir + "/Additive.mat";
+            CreateMaterial(ResourcesDir + "/Additive.mat", "Legacy Shaders/Particles/Additive");
+            CreateMaterial(ResourcesDir + "/Lit.mat", "Standard");   // vaisseaux et planètes des combats 3D
+        }
+
+        static void CreateMaterial(string path, string shaderName)
+        {
             if (AssetDatabase.LoadAssetAtPath<Material>(path) != null) return;
-            var shader = Shader.Find("Legacy Shaders/Particles/Additive");
+            var shader = Shader.Find(shaderName);
             if (shader == null) return;
             AssetDatabase.CreateAsset(new Material(shader), path);
             AssetDatabase.SaveAssets();

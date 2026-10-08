@@ -52,7 +52,7 @@ namespace StellarisMini
             pos = position;
             heading = headingDeg;
 
-            dmgMul = e.DamageMul;
+            dmgMul = e.DamageMul * session.TeamDamageMul(teamId);
             speedMul = e.SpeedMul;
             maxHull = spec.hull;
             hull = Mathf.Clamp(d.hull, 1f, maxHull);
